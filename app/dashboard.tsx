@@ -1,58 +1,142 @@
 import { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import * as Location from "expo-location";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import API from "../services/api";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Dashboard() {
+  const router = useRouter();
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return Alert.alert("Permission denied");
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-    })();
+    getLocation();
   }, []);
 
+  const getLocation = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Location permission required");
+      return;
+    }
+
+    const loc = await Location.getCurrentPositionAsync({});
+    setLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+  };
+
   const sendSOS = async () => {
-    if (!location) return Alert.alert("Location not available");
+    if (!location) return Alert.alert("Fetching location...");
+
     try {
-      await API.post("/sos", { latitude: location.lat, longitude: location.lng });
-      setStatus("🚨 SOS Alert Sent!");
-    } catch {
-      setStatus("Failed to send alert");
+      setLoading(true);
+      setStatus("");
+
+      await API.post("/sos", {
+        latitude: location.lat,
+        longitude: location.lng,
+      });
+
+      setStatus("🚨 Emergency Alert Sent Successfully");
+    } catch (err) {
+      setStatus("⚠️ Failed to send alert");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.profileBtn} onPress={() => router.push("/profile")}>
-        <Text style={styles.profileText}>👤</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.sosBtn} onPress={sendSOS} activeOpacity={0.7}>
-        <Text style={styles.sosText}>SOS</Text>
-      </TouchableOpacity>
-      <Text style={styles.label}>Send Emergency Alert</Text>
-      {location && <Text style={styles.coords}>📍 {location.lat.toFixed(4)}, {location.lng.toFixed(4)}</Text>}
-      {status && <Text style={styles.status}>{status}</Text>}
-    </View>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => router.push("/profile")}>
+          <Text style={styles.profileIcon}>👤</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.centerContent}>
+        <TouchableOpacity
+          style={styles.sosBtn}
+          onPress={sendSOS}
+          activeOpacity={0.8}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" size="large" />
+          ) : (
+            <Text style={styles.sosText}>SOS</Text>
+          )}
+        </TouchableOpacity>
+
+        <Text style={styles.label}>Tap to Send Emergency Alert</Text>
+
+        {location && (
+          <Text style={styles.coords}>
+            📍 {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+          </Text>
+        )}
+
+        {status ? <Text style={styles.status}>{status}</Text> : null}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" },
-  profileBtn: { position: "absolute", top: 60, right: 24 },
-  profileText: { fontSize: 28 },
-  sosBtn: {
-    width: 180, height: 180, borderRadius: 90, backgroundColor: "#DC2626",
-    justifyContent: "center", alignItems: "center",
-    shadowColor: "#DC2626", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 10,
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
   },
-  sosText: { color: "#fff", fontSize: 48, fontWeight: "bold" },
-  label: { marginTop: 24, fontSize: 18, color: "#666" },
-  coords: { marginTop: 12, fontSize: 14, color: "#999" },
-  status: { marginTop: 20, fontSize: 16, fontWeight: "600", color: "#16A34A" },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  profileIcon: {
+    fontSize: 28,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sosBtn: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "#DC2626",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 12,
+  },
+  sosText: {
+    color: "#fff",
+    fontSize: 50,
+    fontWeight: "bold",
+  },
+  label: {
+    marginTop: 25,
+    fontSize: 18,
+    color: "#666",
+  },
+  coords: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#888",
+  },
+  status: {
+    marginTop: 20,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#16A34A",
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
 });
